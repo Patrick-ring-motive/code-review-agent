@@ -1,0 +1,79 @@
+name: Local AI Code Review
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: local-ai-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # Intentionally use pull_request rather than pull_request_target so fork PRs
+    # cannot receive elevated secrets while their code is being inspected.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+
+    steps:
+      - name: Install llama.cpp
+        shell: bash
+        run: |
+          curl -LsSf https://llama.app/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Start local model server
+        shell: bash
+        env:
+          MODEL: "SandLogicTechnologies/Qwen3.5-4B-GGUF:Q4_K_M"
+        run: |
+          mkdir -p "$RUNNER_TEMP/hf"
+          export HF_HOME="$RUNNER_TEMP/hf"
+
+          nohup llama serve \
+            -hf "$MODEL" \
+            --host 127.0.0.1 \
+            --port 8080 \
+            --ctx-size 8192 \
+            --threads 4 \
+            --parallel 1 \
+            > "$RUNNER_TEMP/llama.log" 2>&1 &
+
+          echo $! > "$RUNNER_TEMP/llama.pid"
+
+          for i in $(seq 1 180); do
+            if curl -fsS http://127.0.0.1:8080/v1/models >/dev/null; then
+              echo "llama.cpp is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "llama.cpp failed to start"
+          cat "$RUNNER_TEMP/llama.log"
+          exit 1
+
+      - name: Run OpenHands PR review
+        uses: OpenHands/extensions/plugins/pr-review@main
+        with:
+          llm-model: "openai/SandLogicTechnologies/Qwen3.5-4B-GGUF:Q4_K_M"
+          llm-base-url: "http://127.0.0.1:8080/v1"
+          # OpenHands expects an API key; llama.cpp does not require a real one.
+          llm-api-key: "local"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          use-sub-agents: "false"
+          load-public-skills: "false"
+          collect-feedback: "false"
+          enable-uv-cache: "false"
+
+      - name: Dump local model log on failure
+        if: failure()
+        shell: bash
+        run: |
+          if [ -f "$RUNNER_TEMP/llama.log" ]; then
+            cat "$RUNNER_TEMP/llama.log"
+          fi
