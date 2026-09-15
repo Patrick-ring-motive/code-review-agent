@@ -1,26 +1,56 @@
 name: Local AI Code Review
 
 on:
-  pull_request:
-    types: [opened, reopened, synchronize, ready_for_review]
   workflow_dispatch:
+    inputs:
+      owner:
+        description: Repository owner to scan (blank uses this repository owner)
+        type: string
+        required: false
+
 permissions:
   contents: read
-  pull-requests: write
-  issues: write
 
 concurrency:
-  group: local-ai-review-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  group: local-ai-main-scan
+  cancel-in-progress: false
+
+env:
+  REVIEW_OWNER: ${{ inputs.owner || github.repository_owner }}
 
 jobs:
-  review:
-    # Intentionally use pull_request rather than pull_request_target so fork PRs
-    # cannot receive elevated secrets while their code is being inspected.
+  discover:
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
-
+    outputs:
+      repositories: ${{ steps.discover.outputs.repositories }}
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Discover accessible owned repositories
+        id: discover
+        env:
+          REVIEW_TOKEN: ${{ secrets.REPO_REVIEW_TOKEN }}
+        run: node .github/scripts/review-repositories.mjs discover
+
+  review:
+    needs: discover
+    if: needs.discover.outputs.repositories != '[]'
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        repository: ${{ fromJSON(needs.discover.outputs.repositories) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    env:
+      MODEL: SandLogicTechnologies/Qwen3.5-4B-GGUF:Q4_K_M
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - name: Install llama.cpp
         shell: bash
         run: |
@@ -58,18 +88,11 @@ jobs:
           cat "$RUNNER_TEMP/llama.log"
           exit 1
 
-      - name: Run OpenHands PR review
-        uses: OpenHands/extensions/plugins/pr-review@main
-        with:
-          llm-model: "openai/SandLogicTechnologies/Qwen3.5-4B-GGUF:Q4_K_M"
-          llm-base-url: "http://127.0.0.1:8080/v1"
-          # OpenHands expects an API key; llama.cpp does not require a real one.
-          llm-api-key: "local"
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          use-sub-agents: "false"
-          load-public-skills: "false"
-          collect-feedback: "false"
-          enable-uv-cache: "false"
+      - name: Review main and publish suggestions
+        env:
+          REVIEW_TOKEN: ${{ secrets.REPO_REVIEW_TOKEN }}
+          REVIEW_REPOSITORY: ${{ matrix.repository }}
+        run: node .github/scripts/review-repositories.mjs review
 
       - name: Dump local model log on failure
         if: failure()
