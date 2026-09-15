@@ -28,6 +28,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Install review dependencies
+        run: npm ci --prefix .github/scripts --ignore-scripts
       - name: Discover accessible owned repositories
         id: discover
         env:
@@ -51,6 +53,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Install review dependencies
+        run: npm ci --prefix .github/scripts --ignore-scripts
       - name: Install llama.cpp
         shell: bash
         run: |
