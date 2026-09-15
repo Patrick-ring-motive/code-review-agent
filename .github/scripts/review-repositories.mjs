@@ -11,10 +11,28 @@ function transportError(label, error) {
 async function request(url, options, label) {
   try {
     const response = await fetch(url, options);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    if (!response.ok) {
+      let detail = '';
+      if (url.startsWith('https://api.github.com/') && [403, 429].includes(response.status)) {
+        let body;
+        try { body = await response.json(); } catch {}
+        const parts = [];
+        if (typeof body?.message === 'string') parts.push(body.message);
+        for (const header of ['x-ratelimit-remaining', 'x-ratelimit-reset', 'retry-after', 'x-github-request-id']) {
+          const value = response.headers?.get(header);
+          if (value) parts.push(`${header}=${value}`);
+        }
+        if (response.headers?.get('x-github-sso')) parts.push('Organization SSO authorization required');
+        if (parts.length) {
+          const safe = parts.join('; ').replaceAll(process.env.REVIEW_TOKEN || '\0', '[REDACTED]').replace(/[\r\n]/g, ' ').slice(0, 1500);
+          detail = `; ${safe}`;
+        }
+      }
+      throw new Error(`HTTP ${response.status}${detail}`);
+    }
     return await response.json();
   } catch (error) {
-    if (/^HTTP \d+$/.test(error.message)) throw new Error(`${label}: ${error.message}`);
+    if (/^HTTP \d+(;|$)/.test(error.message)) throw new Error(`${label}: ${error.message}`);
     throw transportError(label, error);
   }
 }
