@@ -1,5 +1,7 @@
 import { appendFileSync } from 'node:fs';
+import { setTimeout as delay } from 'node:timers/promises';
 import { Agent } from 'undici';
+import { publicSource } from './public-source.mjs';
 
 const modelDispatcher = new Agent({ headersTimeout: 1200000, bodyTimeout: 1200000 });
 
@@ -8,7 +10,7 @@ function transportError(label, error) {
   return new Error(`${label}: ${error.message}; cause=${cause?.code || cause?.name || error.name}${cause?.message ? ` (${cause.message})` : ''}`, { cause: error });
 }
 
-async function request(url, options, label) {
+async function request(url, options, label, attempt = 0) {
   try {
     const response = await fetch(url, options);
     if (!response.ok) {
@@ -16,6 +18,16 @@ async function request(url, options, label) {
       if (url.startsWith('https://api.github.com/') && [403, 429].includes(response.status)) {
         let body;
         try { body = await response.json(); } catch {}
+        const remaining = response.headers?.get('x-ratelimit-remaining');
+        const reset = Number(response.headers?.get('x-ratelimit-reset'));
+        const retryAfter = response.headers?.get('retry-after');
+        let waitMs = remaining === '0' && reset > 0 ? Math.max(1000, reset * 1000 - Date.now() + 1000) : 0;
+        if (retryAfter && /^\d+$/.test(retryAfter)) waitMs = Math.max(waitMs, Number(retryAfter) * 1000 + 1000);
+        if (options.method === 'GET' && attempt < 2 && waitMs > 0 && waitMs <= 65 * 60000) {
+          console.warn(`${label}: rate limited; retrying in ${Math.ceil(waitMs / 1000)} seconds (${attempt + 1}/2)`);
+          await delay(waitMs);
+          return request(url, { ...options, signal: AbortSignal.timeout(60000) }, label, attempt + 1);
+        }
         const parts = [];
         if (typeof body?.message === 'string') parts.push(body.message);
         for (const header of ['x-ratelimit-remaining', 'x-ratelimit-reset', 'retry-after', 'x-github-request-id']) {
@@ -119,8 +131,11 @@ async function review() {
   let skipped = 0;
   for (const file of files) {
     if (file.size > 200000) { skipped++; continue; }
-    const blob = await github(`/repos/${repo}/git/blobs/${file.sha}`);
-    const text = Buffer.from(blob.content, 'base64').toString('utf8');
+    let text = info.private === false ? await publicSource(repo, sha, file) : null;
+    if (text === null) {
+      const blob = await github(`/repos/${repo}/git/blobs/${file.sha}`);
+      text = Buffer.from(blob.content, 'base64').toString('utf8');
+    }
     if (text.includes('\0')) { skipped++; continue; }
     const lines = text.split('\n');
     if (lines.some(line => line.length > 6000)) { skipped++; continue; }
