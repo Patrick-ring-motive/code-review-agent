@@ -1,18 +1,35 @@
 import { appendFileSync } from 'node:fs';
+import { Agent } from 'undici';
+
+const modelDispatcher = new Agent({ headersTimeout: 1200000, bodyTimeout: 1200000 });
+
+function transportError(label, error) {
+  const cause = error.cause;
+  return new Error(`${label}: ${error.message}; cause=${cause?.code || cause?.name || error.name}${cause?.message ? ` (${cause.message})` : ''}`, { cause: error });
+}
+
+async function request(url, options, label) {
+  try {
+    const response = await fetch(url, options);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
+  } catch (error) {
+    if (/^HTTP \d+$/.test(error.message)) throw new Error(`${label}: ${error.message}`);
+    throw transportError(label, error);
+  }
+}
 
 const token = process.env.REVIEW_TOKEN;
 const owner = process.env.REVIEW_OWNER;
 const marker = '<!-- local-ai-main-review -->';
 
 async function github(path, method = 'GET', body) {
-  const response = await fetch(`https://api.github.com${path}`, {
+  return request(`https://api.github.com${path}`, {
     method,
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
     body: body === undefined ? undefined : JSON.stringify(body),
     signal: AbortSignal.timeout(60000),
-  });
-  if (!response.ok) throw new Error(`GitHub ${method} ${path}: HTTP ${response.status}`);
-  return response.json();
+  }, `GitHub ${method} ${path}`);
 }
 
 async function discover() {
@@ -33,7 +50,8 @@ async function discover() {
 }
 
 async function infer(path, code, attempt = 0) {
-  const response = await fetch('http://127.0.0.1:8080/v1/chat/completions', {
+  const result = await request('http://127.0.0.1:8080/v1/chat/completions', {
+    dispatcher: modelDispatcher,
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -47,9 +65,7 @@ async function infer(path, code, attempt = 0) {
       ],
     }),
     signal: AbortSignal.timeout(1200000),
-  });
-  if (!response.ok) throw new Error(`Local model: HTTP ${response.status}`);
-  const result = await response.json();
+  }, `Local model POST /v1/chat/completions (${path})`);
   const choice = result.choices?.[0];
   const content = typeof choice?.message?.content === 'string' ? choice.message.content.trim() : '';
   if (choice?.finish_reason === 'stop' && content) return content;
@@ -148,8 +164,12 @@ async function reviewBatch() {
   if (failed.length) throw new Error(`Reviews failed for: ${failed.join(', ')}`);
 }
 
-if (!token || !owner) throw new Error('REVIEW_TOKEN and REVIEW_OWNER are required');
-if (process.argv[2] === 'discover') await discover();
-else if (process.argv[2] === 'review') await review();
-else if (process.argv[2] === 'review-batch') await reviewBatch();
-else throw new Error('Expected discover, review, or review-batch command');
+try {
+  if (!token || !owner) throw new Error('REVIEW_TOKEN and REVIEW_OWNER are required');
+  if (process.argv[2] === 'discover') await discover();
+  else if (process.argv[2] === 'review') await review();
+  else if (process.argv[2] === 'review-batch') await reviewBatch();
+  else throw new Error('Expected discover, review, or review-batch command');
+} finally {
+  await modelDispatcher.close();
+}
