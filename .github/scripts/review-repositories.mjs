@@ -22,8 +22,14 @@ async function discover() {
     repos.push(...batch.filter(repo => repo.owner.login.toLowerCase() === owner.toLowerCase() && !repo.archived && !repo.disabled));
     if (batch.length < 100) break;
   }
-  if (repos.length > 256) throw new Error('More than 256 repositories: split scans by owner or add an allowlist.');
-  appendFileSync(process.env.GITHUB_OUTPUT, `repositories=${JSON.stringify(repos.map(repo => repo.full_name))}\n`);
+  const names = [...new Set(repos.map(repo => repo.full_name))].sort();
+  const batchSize = Math.max(1, Math.ceil(names.length / 256));
+  const batches = [];
+  for (let index = 0; index < names.length; index += batchSize) {
+    batches.push(names.slice(index, index + batchSize));
+  }
+  console.log(`Discovered ${names.length} repositories in ${batches.length} batches`);
+  appendFileSync(process.env.GITHUB_OUTPUT, `repositories=${JSON.stringify(batches)}\n`);
 }
 
 async function infer(path, code) {
@@ -107,7 +113,25 @@ async function review() {
   console.log(`${repo}: published review for ${sha}`);
 }
 
+async function reviewBatch() {
+  const repositories = JSON.parse(process.env.REVIEW_REPOSITORIES || '[]');
+  if (!Array.isArray(repositories) || !repositories.length || repositories.some(repo => typeof repo !== 'string')) {
+    throw new Error('REVIEW_REPOSITORIES must be a nonempty JSON array of repository names');
+  }
+  const failed = [];
+  for (const repo of repositories) {
+    process.env.REVIEW_REPOSITORY = repo;
+    try { await review(); }
+    catch (error) {
+      console.error(`${repo}: ${error.message}`);
+      failed.push(repo);
+    }
+  }
+  if (failed.length) throw new Error(`Reviews failed for: ${failed.join(', ')}`);
+}
+
 if (!token || !owner) throw new Error('REVIEW_TOKEN and REVIEW_OWNER are required');
 if (process.argv[2] === 'discover') await discover();
 else if (process.argv[2] === 'review') await review();
-else throw new Error('Expected discover or review command');
+else if (process.argv[2] === 'review-batch') await reviewBatch();
+else throw new Error('Expected discover, review, or review-batch command');
