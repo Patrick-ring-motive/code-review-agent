@@ -91,8 +91,8 @@ jobs:
       - name: Review main and publish suggestions
         env:
           REVIEW_TOKEN: ${{ secrets.REPO_REVIEW_TOKEN }}
-          REVIEW_REPOSITORY: ${{ matrix.repository }}
-        run: node .github/scripts/review-repositories.mjs review
+          REVIEW_REPOSITORIES: ${{ toJSON(matrix.repository) }}
+        run: node .github/scripts/review-repositories.mjs review-batch
 
       - name: Dump local model log on failure
         if: failure()
