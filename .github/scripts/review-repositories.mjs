@@ -195,66 +195,38 @@ async function review() {
       }
     }
   }
-  const header = ''+marker+
-          '\n # # Automated main - branch review\ n\ nCommit: '+
-            'sha'+
-          ('\n\ nReviewed '+
-            (files.length - skipped))+
-          
-          'supported source files;'+
-          '\n'+skipped+'skipped'+
-          'oversized, binary, or long - line files.Dependencies and generated build directories excluded.Files reviewed in isolated chunks;'+
-          'cross - file analysis is not performed.AI suggestions require human verification.\n';
+    const header = marker +
+    '\n## Automated main-branch review\n\nCommit: ' + sha +
+    '\n\nReviewed ' + (files.length - skipped) + ' supported source files; ' +
+    skipped + ' skipped (oversized, binary, or long-line files). ' +
+    'Dependencies and generated build directories excluded. Files reviewed in isolated chunks; ' +
+    'cross-file analysis is not performed. AI suggestions require human verification.\n';
   const max = 55000 - header.length;
   const body = header + (findings ? findings.slice(0, max) + (findings.length > max ? '\n\nReport truncated due to issue size limit.' : '') : '\nNo concrete findings reported.');
   if (!info.has_issues) {
-    if (!process.env.GITHUB_STEP_SUMMARY) throw new Error(`
-          $ {
-            repo
-          }: Issues disabled and GITHUB_STEP_SUMMARY unavailable`);
+    if (!process.env.GITHUB_STEP_SUMMARY) throw new Error(repo + ': Issues disabled and GITHUB_STEP_SUMMARY unavailable');
     if (info.private) {
       const automationRepo = process.env.GITHUB_REPOSITORY;
-      if (!automationRepo || !(await github(` / repos / $ {
-            automationRepo
-          }
-          `)).private) {
-        throw new Error(`
-          $ {
-            repo
-          }: refusing to expose a private repository report in a public Actions summary`);
+      if (!automationRepo || !(await github('/repos/' + automationRepo)).private) {
+        throw new Error(repo + ': refusing to expose a private repository report in a public Actions summary');
       }
     }
-    appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\
-          n # $ {
-            repo
-          }\
-          n\ nIssues are disabled;
-          suggestions were not posted to this repository.\n\ n$ {
-            body
-          }\
-          n`);
-    console.log(`
-          $ {
-            repo
-          }: Issues disabled;
-          review saved to Actions job summary`);
+    appendFileSync(process.env.GITHUB_STEP_SUMMARY, '\n# ' + repo + '\n\nIssues are disabled; suggestions were not posted to this repository.\n\n' + body + '\n');
+    console.log(repo + ': Issues disabled; review saved to Actions job summary');
     return;
   }
   let existing;
   for (let page = 1; ; page++) {
-    const issues = await github(` / repos / $ {
-            repo
-          }
-          /issues?state=open&per_page=100&page=${page}`);
-          existing = issues.find(issue => !issue.pull_request && issue.title === 'Local AI review: main' && issue.body?.startsWith(marker));
-          if (existing || issues.length < 100) break;
-        }
-        await github(existing ? `/repos/${repo}/issues/${existing.number}` : `/repos/${repo}/issues`, existing ? 'PATCH' : 'POST', {
-          title: 'Local AI review: main',
-          body
-        });
-        console.log(`${repo}: published review for ${sha}`);
-      }
+    const issues = await github('/repos/' + repo + '/issues?state=open&per_page=100&page=' + page);
+    existing = issues.find(issue => !issue.pull_request && issue.title === 'Local AI review: main' && issue.body?.startsWith(marker));
+    if (existing || issues.length < 100) break;
+  }
+  await github(existing ? '/repos/'+repo+'/issues/'+existing.number : '/repos/'+repo+'/issues', existing ? 'PATCH' : 'POST', {
+    title: 'Local AI review: main',
+    body
+  });
+  console.log(repo+': published review for '+sha);
+}
 
       async function reviewBatch() {
         const repositories = JSON.parse(process.env.REVIEW_REPOSITORIES || '[]');
