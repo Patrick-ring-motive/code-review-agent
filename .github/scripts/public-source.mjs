@@ -1,4 +1,6 @@
-import { createHash } from 'node:crypto';
+import {
+  createHash
+} from 'node:crypto';
 
 export async function publicSource(repo, commit, file) {
   const [owner, name] = repo.split('/');
@@ -10,7 +12,10 @@ export async function publicSource(repo, commit, file) {
   ];
   for (const url of urls) {
     try {
-      const response = await fetch(url, { signal: AbortSignal.timeout(10000), redirect: 'error' });
+      const response = await fetch(url, {
+        signal: AbortSignal.timeout(10000),
+        redirect: 'error'
+      });
       if (!response.ok || !response.body) {
         await response.body?.cancel();
         continue;
