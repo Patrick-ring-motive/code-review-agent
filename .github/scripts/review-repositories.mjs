@@ -195,22 +195,16 @@ async function review() {
       }
     }
   }
-  const header = `
-          $ {
-            marker
-          }\
-          n # # Automated main - branch review\ n\ nCommit: $ {
-            sha
-          }\
-          n\ nReviewed $ {
-            files.length - skipped
-          }
-          supported source files;
-          skipped $ {
-            skipped
-          }
-          oversized, binary, or long - line files.Dependencies and generated build directories excluded.Files reviewed in isolated chunks;
-          cross - file analysis is not performed.AI suggestions require human verification.\n`;
+  const header = ''+marker+
+          '\n # # Automated main - branch review\ n\ nCommit: '+
+            'sha'+
+          ('\n\ nReviewed '+
+            (files.length - skipped))+
+          
+          'supported source files;'+
+          '\n'+skipped+'skipped'+
+          'oversized, binary, or long - line files.Dependencies and generated build directories excluded.Files reviewed in isolated chunks;'+
+          'cross - file analysis is not performed.AI suggestions require human verification.\n';
   const max = 55000 - header.length;
   const body = header + (findings ? findings.slice(0, max) + (findings.length > max ? '\n\nReport truncated due to issue size limit.' : '') : '\nNo concrete findings reported.');
   if (!info.has_issues) {
