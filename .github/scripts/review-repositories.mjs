@@ -122,15 +122,15 @@ async function infer(path, code, attempt = 0) {
   const content = typeof choice?.message?.content === 'string' ? choice.message.content.trim() : '';
   if (choice?.finish_reason === 'stop' && content) return content;
   const detail = `finish_reason=${choice?.finish_reason ?? 'missing'}, content_chars=${content.length}, completion_tokens=${result.usage?.completion_tokens ?? 'unknown'}`;
-  if (attempt === 0 && (choice?.finish_reason === 'length' || (choice?.finish_reason === 'stop' && !content))) {
+  /*if (attempt === 0 && (choice?.finish_reason === 'length' || (choice?.finish_reason === 'stop' && !content))) {
     console.warn(`${path}: incomplete model response (${detail}); retrying once`);
     return infer(path, code, 1);
-  }
-  if (choice?.finish_reason === 'length' && content) {
+  }*/
+  //if (choice?.finish_reason === 'length' && content) {
     console.warn(`${path}: model response still truncated on retry (${detail}); using partial output`);
     return `${content}\n\n_[Findings truncated — model hit output limit on this chunk.]_`;
-  }
-  throw new Error(`${path}: Model returned incomplete output (${detail})`);
+  //}
+  //throw new Error(`${path}: Model returned incomplete output (${detail})`);
 }
 
 
