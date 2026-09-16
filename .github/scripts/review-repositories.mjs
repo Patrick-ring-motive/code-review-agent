@@ -69,19 +69,19 @@ const weightedLcs = (seq1 = [], seq2 = []) => {
   );
 };
 
-const lcsMatch = (x, y) =>{
-    return lcs(x,y)  >= Math.floor(0.8 * Math.max(x?.length||0,y.length||0));
+const lcsMatch = (x, y) => {
+  return lcs(x, y) >= Math.floor(0.8 * Math.max(x?.length || 0, y.length || 0));
 };
 
-const dedupParagraphs = x =>{
-    const paragraphs = x.split('\n\n');
-    const deduped = [];
-    for (const p of paragraphs) {
-        if (!deduped.some(existing => lcsMatch(existing, p))) {
-            deduped.push(p);
-        }
+const dedupParagraphs = x => {
+  const paragraphs = x.split('\n\n');
+  const deduped = [];
+  for (const p of paragraphs) {
+    if (!deduped.some(existing => lcsMatch(existing, p))) {
+      deduped.push(p);
     }
-    return deduped.join('\n\n');
+  }
+  return deduped.join('\n\n');
 };
 
 async function request(url, options, label, attempt = 0) {
