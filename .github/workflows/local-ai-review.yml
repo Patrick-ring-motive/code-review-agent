@@ -33,15 +33,17 @@ jobs:
           go-version: stable
       - name: Build Electric Shell
         run: |
-          (cd electric-shell && go build -o "$RUNNER_TEMP/electric-shell" .)
+          go run ./electric-shell -s /bin/bash <<'EOF'
+          go build -o "$RUNNER_TEMP/electric-shell" ./electric-shell
           echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+          EOF
       - name: Install review dependencies
-        run: electric-shell --color -c 'npm ci --prefix .github/scripts --ignore-scripts'
+        run: electric-shell -c 'npm ci --prefix .github/scripts --ignore-scripts'
       - name: Discover accessible owned repositories
         id: discover
         env:
           REVIEW_TOKEN: ${{ secrets.REPO_REVIEW_TOKEN }}
-        run: electric-shell --color -c 'node .github/scripts/review-repositories.mjs discover'
+        run: electric-shell -c 'node .github/scripts/review-repositories.mjs discover'
 
   review:
     needs: discover
@@ -65,18 +67,20 @@ jobs:
           go-version: stable
       - name: Build Electric Shell
         run: |
-          (cd electric-shell && go build -o "$RUNNER_TEMP/electric-shell" .)
+          go run ./electric-shell -s /bin/bash <<'EOF'
+          go build -o "$RUNNER_TEMP/electric-shell" ./electric-shell
           echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+          EOF
       - name: Install review dependencies
-        run: electric-shell --color -c 'npm ci --prefix .github/scripts --ignore-scripts'
+        run: electric-shell -c 'npm ci --prefix .github/scripts --ignore-scripts'
       - name: Install llama.cpp
-        shell: bash
         run: |
+          electric-shell -s /bin/bash <<'EOF'
           curl -LsSf https://llama.app/install.sh | sh
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          EOF
 
       - name: Start local model server
-        shell: bash
         env:
           MODEL: "SandLogicTechnologies/Qwen3.5-4B-GGUF:Q4_K_M"
         run: |
@@ -110,12 +114,13 @@ jobs:
         env:
           REVIEW_TOKEN: ${{ secrets.REPO_REVIEW_TOKEN }}
           REVIEW_REPOSITORIES: ${{ toJSON(matrix.repository) }}
-        run: electric-shell --color -c 'node .github/scripts/review-repositories.mjs review-batch'
+        run: electric-shell -c 'node .github/scripts/review-repositories.mjs review-batch'
 
       - name: Dump local model log on failure
         if: failure()
-        shell: bash
         run: |
+          electric-shell -s /bin/bash <<'EOF'
           if [ -f "$RUNNER_TEMP/llama.log" ]; then
             cat "$RUNNER_TEMP/llama.log"
           fi
+          EOF
