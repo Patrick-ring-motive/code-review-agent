@@ -79,7 +79,8 @@ func usesColor(mode int, output *os.File) bool {
 		return mode == 1
 	}
 	_, disabled := os.LookupEnv("NO_COLOR")
-	return term.IsTerminal(int(output.Fd())) && !disabled
+	// GitHub Actions captures output through pipes but renders ANSI colors.
+	return !disabled && (term.IsTerminal(int(output.Fd())) || os.Getenv("GITHUB_ACTIONS") == "true")
 }
 
 func exitCode(err error) int {
