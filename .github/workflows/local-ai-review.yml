@@ -33,10 +33,8 @@ jobs:
           go-version: stable
       - name: Build Electric Shell
         run: |
-          go run ./electric-shell -s /bin/bash <<'EOF'
-          go build -o "$RUNNER_TEMP/electric-shell" ./electric-shell
+          go -C electric-shell build -o "$RUNNER_TEMP/electric-shell" .
           echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
-          EOF
       - name: Install review dependencies
         run: electric-shell -c 'npm ci --prefix .github/scripts --ignore-scripts'
       - name: Discover accessible owned repositories
@@ -67,10 +65,8 @@ jobs:
           go-version: stable
       - name: Build Electric Shell
         run: |
-          go run ./electric-shell -s /bin/bash <<'EOF'
-          go build -o "$RUNNER_TEMP/electric-shell" ./electric-shell
+          go -C electric-shell build -o "$RUNNER_TEMP/electric-shell" .
           echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
-          EOF
       - name: Install review dependencies
         run: electric-shell -c 'npm ci --prefix .github/scripts --ignore-scripts'
       - name: Install llama.cpp
@@ -84,6 +80,7 @@ jobs:
         env:
           MODEL: "SandLogicTechnologies/Qwen3.5-4B-GGUF:Q4_K_M"
         run: |
+          electric-shell -s /bin/bash <<'EOF'
           mkdir -p "$RUNNER_TEMP/hf"
           export HF_HOME="$RUNNER_TEMP/hf"
 
@@ -109,6 +106,7 @@ jobs:
           echo "llama.cpp failed to start"
           cat "$RUNNER_TEMP/llama.log"
           exit 1
+          EOF
 
       - name: Review main and publish suggestions
         env:
